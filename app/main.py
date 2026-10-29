@@ -1,5 +1,9 @@
+import uuid
+
 from fastapi import FastAPI, HTTPException, Response
 from app.services.conversation import store
+from app.schemas.chat import ChatResponse, ChatRequest
+
 
 app = FastAPI(title="Argus")
 
@@ -46,3 +50,40 @@ async def delete_conversation(conversation_id: str):
         )
 
     return Response(status_code=204)
+
+
+@app.post("/chat", response_model=ChatResponse)
+async def chat(request: ChatRequest):
+    conversation = store.get(str(request.conversation_id))
+
+    if conversation is None:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "code": "CONVERSATION_NOT_FOUND",
+                "message": "Conversation not found or expired",
+            }
+        )
+
+    #try to acquire the conversation lock without blocking
+    if not conversation.lock.acquire(blocking=False):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "CONVERSATION_BUSY",
+                "message": "a task is already running in this conversation",
+            }
+        )
+
+    try:
+        conversation.touch()
+
+        return ChatResponse(
+            task_id=uuid.uuid4(),
+            conversation_id=request.conversation_id,
+            status="completed",
+            answer=f"your message was received: {request.message}",
+            error=None
+        )
+    finally:
+        conversation.lock.release()
