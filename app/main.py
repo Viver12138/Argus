@@ -1,15 +1,34 @@
 import uuid
 
-from fastapi import FastAPI, HTTPException, Response
+from fastapi import FastAPI, HTTPException, Response, Request
 from app.services.conversation import store
 from app.schemas.chat import ChatResponse, ChatRequest
 
+from contextlib import asynccontextmanager
+from app.clients.deepseek import DeepSeekClient
 
-app = FastAPI(title="Argus")
+
+@asynccontextmanager  # 异步上下文管理器
+async def lifespan(app: FastAPI):  # 定义应用生命周期
+    """manage application-level resources"""
+    # 共享客户端
+    app.state.deepseek_client = DeepSeekClient()
+
+    try:
+        yield
+    finally:
+        await app.state.deepseek_client.close()
+
+app = FastAPI(
+    title="Argus",
+    lifespan=lifespan,
+)
 
 @app.get("/health")
 async def health_check():
     return {"status": "ok"}
+
+
 
 @app.post("/conversations", status_code=201)
 async def conversations():
@@ -53,7 +72,7 @@ async def delete_conversation(conversation_id: str):
 
 
 @app.post("/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest):
+async def chat(request: ChatRequest, http_request: Request):
     conversation = store.get(str(request.conversation_id))
 
     if conversation is None:
@@ -78,11 +97,40 @@ async def chat(request: ChatRequest):
     try:
         conversation.touch()
 
+        deepseek_client = http_request.app.state.deepseek_client
+
+        messages = [
+            {
+                "role": "system",
+                "content": "You are a helpful personal assistant.",
+            },
+            *conversation.messages,
+            {
+                "role": "user",
+                "content": request.message,
+            },
+        ]
+
+        answer = await deepseek_client.chat(messages)
+
+        conversation.messages.append(
+            {
+                "role": "user",
+                "content": request.message,
+            }
+        )
+
+        conversation.messages.append(
+            {
+                "role": "assistant",
+                "content": answer,
+            }
+        )
         return ChatResponse(
             task_id=uuid.uuid4(),
             conversation_id=request.conversation_id,
             status="completed",
-            answer=f"your message was received: {request.message}",
+            answer = answer,
             error=None
         )
     finally:

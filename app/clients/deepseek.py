@@ -31,27 +31,22 @@ class DeepSeekClient:
             max_retries=0,
         )
 
-        async def chat(self, message: str) -> str:
-            """send a msg and return model's response"""
-            response = await self.client.chat.completions.create(
-                model=self.model,
-                message=[
-                    {
-                        "role": "user",
-                        "content": message,
-                    }
-                ],
-                temperature=0.7
+    async def chat(self, messages: list[dict[str, str]]) -> str:
+        """send a msg and return model's response"""
+        response = await self.client.chat.completions.create(
+            model=self.model,
+            messages=messages,
+            temperature=0.7
+        )
+
+        answer = response.choices[0].message.content
+
+        if not answer:
+            raise RuntimeError(
+                "DeepSeek returned an empty response"
             )
+        return answer.strip()
 
-            answer = response.chioces[0].messages[0].content
-
-            if not answer:
-                raise RuntimeError(
-                    "DEEPSEEK RETURNED AN EMPTY RESPONSE"
-                )
-            return answer.strip()
-
-        async def close(self) -> None:
-            """close the client"""
-            await self.client.close()
+    async def close(self) -> None:
+        """close the client"""
+        await self.client.close()

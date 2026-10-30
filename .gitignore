@@ -57,6 +57,21 @@ coverage.xml
 .env
 .env.*
 !.env.example
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# --- Databases ---
+*.db
+*.sqlite
+*.sqlite3
+
+# --- Test code (local only) ---
+scripts/
+/test_conversation.py
+tests/
 
 # --- Logs ---
 *.log
