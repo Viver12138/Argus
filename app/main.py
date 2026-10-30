@@ -7,6 +7,9 @@ from app.schemas.chat import ChatResponse, ChatRequest
 from contextlib import asynccontextmanager
 from app.clients.deepseek import DeepSeekClient
 
+from app.exceptions.model_errors import ModelError
+
+from fastapi.responses import JSONResponse
 
 @asynccontextmanager  # 异步上下文管理器
 async def lifespan(app: FastAPI):  # 定义应用生命周期
@@ -98,40 +101,60 @@ async def chat(request: ChatRequest, http_request: Request):
         conversation.touch()
 
         deepseek_client = http_request.app.state.deepseek_client
+        try:
+            messages = [
+                {
+                    "role": "system",
+                    "content": "You are a helpful personal assistant.",
+                },
+                *conversation.messages,
+                {
+                    "role": "user",
+                    "content": request.message,
+                },
+            ]
 
-        messages = [
-            {
-                "role": "system",
-                "content": "You are a helpful personal assistant.",
-            },
-            *conversation.messages,
-            {
-                "role": "user",
-                "content": request.message,
-            },
-        ]
+            answer = await deepseek_client.chat(messages)
 
-        answer = await deepseek_client.chat(messages)
+            conversation.messages.append(
+                {
+                    "role": "user",
+                    "content": request.message,
+                }
+            )
 
-        conversation.messages.append(
-            {
-                "role": "user",
-                "content": request.message,
+            conversation.messages.append(
+                {
+                    "role": "assistant",
+                    "content": answer,
+                }
+            )
+            return ChatResponse(
+                task_id=uuid.uuid4(),
+                conversation_id=request.conversation_id,
+                status="completed",
+                answer = answer,
+                error=None
+            )
+        except ModelError as exc:
+            status_code = {
+                "MODEL_AUTHENTICATION_FAILED": 502,
+                "MODEL_RATE_LIMITED": 429,
+                "MODEL_TIMEOUT": 504,
+                "MODEL_CONNECTION_FAILED": 503,
+                "MODEL_API_ERROR": 502,
+                "MODEL_EMPTY_RESPONSE": 502,
             }
-        )
 
-        conversation.messages.append(
-            {
-                "role": "assistant",
-                "content": answer,
-            }
-        )
-        return ChatResponse(
-            task_id=uuid.uuid4(),
-            conversation_id=request.conversation_id,
-            status="completed",
-            answer = answer,
-            error=None
-        )
+            return JSONResponse(
+                status_code=status_code.get(exc.code, 500),
+                content=ChatResponse(
+                task_id=uuid.uuid4(),
+                conversation_id=request.conversation_id,
+                status="failed",
+                error=exc.code,
+                ).model_dump(mode="json")
+            )
+
     finally:
         conversation.lock.release()

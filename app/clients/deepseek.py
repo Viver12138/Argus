@@ -4,6 +4,24 @@ import os
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
 
+from openai import (
+    AsyncOpenAI,
+    AuthenticationError,
+    RateLimitError,
+    APITimeoutError,
+    APIConnectionError,
+    APIStatusError,
+)
+
+from app.exceptions.model_errors import (
+    ModelAuthenticationError,
+    ModelRateLimitError,
+    ModelTimeoutError,
+    ModelConnectionError,
+    ModelAPIError,
+    ModelEmptyResponseError,
+)
+
 load_dotenv()
 
 class DeepSeekClient:
@@ -33,19 +51,38 @@ class DeepSeekClient:
 
     async def chat(self, messages: list[dict[str, str]]) -> str:
         """send a msg and return model's response"""
-        response = await self.client.chat.completions.create(
-            model=self.model,
-            messages=messages,
-            temperature=0.7
-        )
-
-        answer = response.choices[0].message.content
-
-        if not answer:
-            raise RuntimeError(
-                "DeepSeek returned an empty response"
+        try:
+            response = await self.client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                temperature=0.7
             )
-        return answer.strip()
+
+            answer = response.choices[0].message.content
+
+            if not answer or not answer.strip():
+                raise ModelEmptyResponseError()
+            return answer.strip()
+
+        except ModelEmptyResponseError:
+            raise
+
+        except AuthenticationError as exc:
+            raise ModelAuthenticationError() from exc
+
+        except RateLimitError as exc:
+            raise ModelRateLimitError() from exc
+
+        except APITimeoutError as exc:
+            raise ModelTimeoutError() from exc
+
+        except APIConnectionError as exc:
+            raise ModelConnectionError() from exc
+
+        except APIStatusError as exc:
+            raise ModelAPIError() from exc
+
+
 
     async def close(self) -> None:
         """close the client"""
