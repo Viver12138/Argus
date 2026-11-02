@@ -4,6 +4,15 @@ import os
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
 
+from dataclasses import dataclass
+from typing import Any
+
+@dataclass
+class ModelResponse:
+    content: str | None
+    tool_calls: list[Any] | None
+    finish_reason: str | None
+
 from openai import (
     AsyncOpenAI,
     AuthenticationError,
@@ -49,20 +58,45 @@ class DeepSeekClient:
             max_retries=0,
         )
 
-    async def chat(self, messages: list[dict[str, str]]) -> str:
+    async def chat(
+            self,
+            messages: list[dict[str, Any]],
+            tools: list[dict[str, Any]] | None=None
+                   ) -> ModelResponse:
         """send a msg and return model's response"""
         try:
+            request_params = {
+                "model": self.model,
+                "messages": messages,
+                "temperature": 0.7
+            }
+
+            if tools:
+                request_params["tools"] = tools
+                request_params["tool_choice"] = "auto"
+
             response = await self.client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                temperature=0.7
+                **request_params
             )
 
-            answer = response.choices[0].message.content
+            message = response.choices[0].message
 
-            if not answer or not answer.strip():
+            content = (
+                message.content.strip()
+                if message.content and message.content.strip()
+                else None
+            )
+
+            tool_calls = message.tool_calls
+
+            if content is None and not tool_calls:
                 raise ModelEmptyResponseError()
-            return answer.strip()
+
+            return ModelResponse(
+                content=content,
+                tool_calls=tool_calls,
+                finish_reason=response.choices[0].finish_reason
+            )
 
         except ModelEmptyResponseError:
             raise
