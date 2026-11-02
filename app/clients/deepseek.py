@@ -12,6 +12,7 @@ class ModelResponse:
     content: str | None
     tool_calls: list[Any] | None
     finish_reason: str | None
+    raw_message: Any
 
 from openai import (
     AsyncOpenAI,
@@ -95,7 +96,8 @@ class DeepSeekClient:
             return ModelResponse(
                 content=content,
                 tool_calls=tool_calls,
-                finish_reason=response.choices[0].finish_reason
+                finish_reason=response.choices[0].finish_reason,
+                raw_message=message
             )
 
         except ModelEmptyResponseError:
