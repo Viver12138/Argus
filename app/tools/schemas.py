@@ -8,7 +8,7 @@ TOOL_SCHEMAS = [
                 "type": "object",
                 "properties": {
                     "expression": {
-                        "type": "object",
+                        "type": "string",
                         "description": "The mathematical expression",
                     }
                 },

@@ -1,6 +1,8 @@
 import json
 from dataclasses import dataclass
 from typing import Any
+from types import SimpleNamespace
+
 
 @dataclass
 class ParsedToolCall:
