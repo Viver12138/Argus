@@ -1,6 +1,10 @@
 from collections.abc import Callable
 from typing import Any, Dict
 
+from app.tools.calculator import calculate
+from app.tools.text_tool import process_text
+from app.tools.datetime_tool import get_datetime
+
 
 class ToolRegistry:
     """manage registered tools"""
@@ -25,3 +29,14 @@ class ToolRegistry:
 
     def list_tools(self) -> list[str]:
         return list(self._tools.keys())
+
+def create_default_registry() -> ToolRegistry:
+        """create a registry containing all built-in tools"""
+
+        registry = ToolRegistry()
+
+        registry.register("calculate", calculate)
+        registry.register("get_datetime", get_datetime)
+        registry.register("process_text", process_text)
+
+        return registry
